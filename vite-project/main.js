@@ -1,6 +1,6 @@
 import './style.css';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { OrbitControls  } from 'three/examples/jsm/controls/OrbitControls';
 
 
 class Cubie{
@@ -53,6 +53,10 @@ class Cube{
           let cubie = new Cubie(this.cubieSize, (x*(this.cubieSize+this.margin)), (y*(this.cubieSize+this.margin)), (z*(this.cubieSize+this.margin)), [...a, ...b, ...c]);
           this.cubies.push(cubie);
           this.cube.add(cubie.obj);
+          const axesHelper = new THREE.AxesHelper( 1 );
+
+          cubie.obj.add( axesHelper );
+
         }
       }
     }
@@ -67,111 +71,69 @@ class Rotate{
     this.zAxis =  new THREE.Vector3(0, 0, 1);
     this.center = new THREE.Vector3(0, 0, 0);  
     this.cur_laps = 0;
-    this.animationSpeed = THREE.MathUtils.degToRad(10);
+    this.animationStep=  Math.PI/100;
     this.animateQueue = []
+    this.curSteps = 1
+    this.flag = true
 
   }
-  compareCorrectly(current, desired, dir){
-    switch (dir < 0){
-      case true: return (current >= desired);
-      case false: return (current <= desired)
-    }
-  }
+
+
   rotateOnGivenAxis(axis, coord, rotationDir){
-    let min, max;
-    if (axis == 'y') {
-      min = -90
-      max = 90
-    } 
-    else {
-      min = -180
-      max = 180
-    }
-    let side = this.cube.cubies.filter(cubie => cubie.obj.position[axis].toFixed(2) == (coord+this.cube.margin*coord))
-    let deg = THREE.MathUtils.radToDeg(side[side.length-1].obj.rotation[axis])+rotationDir*90
-    // let laps = Math.floor(Math.abs(deg)/(max*2));
-    let laps = 0;
-    let left;
-    console.log('raw', deg)
-    // console.log('laps', Math.floor(Math.abs(deg)/358), 'deg', deg)
-    if (deg > max){
-      // console.log('in first if')
-      // left = laps > 0? deg%(max*2): deg - max 
-      // deg = min + left
-      deg = min
-    }
-    else if (deg < min){
-      // console.log('in second if')
-      // left = laps > 0? deg%(max*2): deg - min
-      // deg = max + left
-      deg = max
-      
-    }
-    deg = Math.floor(deg)
-    console.log('final', deg, laps)
-    // this.animateQueue.push({'side': side, 'axis': axis, 'laps': laps, 'deg': deg, 'dir': rotationDir, 'beforeRot': THREE.MathUtils.radToDeg(side[0].obj.rotation[axis])})
-    console.log(side)
-    // side.forEach(cubie => this.rotateArroundPoint(cubie.obj, this.center, this[axis+'Axis'], rotationDir*Math.PI/2, true))
+    let side = this.cube.cubies.filter(cubie => Math.round(cubie.obj.position[axis]) == (coord));
+    let deg = Math.PI/2;
+    
+    this.animateQueue.push({'side': side, 'axis': axis, 'deg': deg, 'dir': rotationDir});
+    // side.forEach(cubie => {this.rotateArroundPoint(cubie.obj, this.center, this[axis+'Axis'], THREE.MathUtils.degToRad(rotationDir*90), true); console.log(cubie.obj.rotation)});
   
   }
 
-  animateRotation(){
-    let curAnimation = this.animateQueue[0]
-    if (curAnimation != undefined){
-     
-      for (let i in curAnimation['side']){
-        let cubie = curAnimation['side'][i]
+   // obj - your object (THREE.Object3D or derived)
+  // point - the point of rotation (THREE.Vector3)
+  // axis - the axis of rotation (normalized THREE.Vector3)
+  // theta - radian value of rotation
+  // pointIsWorld - boolean indicating the point is in world coordinates (default = false)
+  rotateArroundPoint(obj, point, axis, theta, pointIsWorld){
+    pointIsWorld = (pointIsWorld === undefined)? false : pointIsWorld;
+    if(pointIsWorld)
+        obj.parent.localToWorld(obj.position); // compensate for world coordinate
 
-        if (cubie == curAnimation['side'][0]){
-          // console.log('current', cubie.obj.rotation[curAnimation["axis"]], 'rads', curAnimation['radians'])
-          // console.log('a', this.compareCorrectly(cubie.obj.rotation[curAnimation["axis"]], curAnimation['radians'], curAnimation['dir']))
-          console.log('check', Math.floor(THREE.MathUtils.radToDeg(cubie.obj.rotation[curAnimation["axis"]])), curAnimation['deg'])
-          if ((Math.floor(THREE.MathUtils.radToDeg(cubie.obj.rotation[curAnimation["axis"]])) != curAnimation['deg']) || this.cur_laps < curAnimation['laps']){
-            this.cur_laps += Math.floor(THREE.MathUtils.radToDeg(cubie.obj.rotation[curAnimation["axis"]])) != Math.floor(curAnimation["beforeRot"])? 0: 1
-            // console.log((cubie.obj.rotation[curAnimation["axis"]]))
-          }
-          else {
-            console.log('a', THREE.MathUtils.radToDeg(cubie.obj.rotation[curAnimation["axis"]]))
-            console.log('a', 'breakinggg')
-            this.cur_laps = 0
-            // console.log(cubie.obj.position)
-            // console.log(cubie.obj.rotation[curAnimation["axis"]])
+    obj.position.sub(point); // remove the offset
+    obj.position.applyAxisAngle(axis, theta); // rotate the POSITION
+    obj.position.add(point); // re-add the offset
+
+    if(pointIsWorld){
+        obj.parent.worldToLocal(obj.position); // undo world coordinates compensation
+    }
+    obj.rotateOnWorldAxis(axis, theta); // rotate the OBJECT
+
+  }
+  
+  animateRotation(){
+    let cur = this.animateQueue[0];
+    if (cur != undefined ){
+      for (let i in cur['side']){
+        let cubie = cur['side'][i]
+        this.rotateArroundPoint(cubie.obj, this.center, this[cur['axis']+'Axis'], cur['dir']*this.animationStep, true)
+        if (i == cur['side'].length-1){
+          if ((this.curSteps*this.animationStep) >= cur['deg']){
+            console.log('finished dif', cur['deg']-(this.curSteps*this.animationStep))
+            this.curSteps = 1;
             this.animateQueue.shift()
+            setTimeout(function() {
+            }, (5000));   
             break;
           }
-        }
+          console.log('stil not finished', (this.curSteps*this.animationStep), cur['deg'])
 
-        // console.log('a', THREE.MathUtils.radToDeg(cubie.obj.rotation[curAnimation["axis"]]))
-        this.rotateArroundPoint(cubie.obj, this.center, this[curAnimation["axis"]+'Axis'], curAnimation['dir'] * this.animationSpeed)
+          this.curSteps += 1;
+        }
+        console.log('...')
       }
     }
   }
 
-  // animateRotation(){
-  //   let curAnimation = this.animateQueue[0]
-  //   if (curAnimation != undefined){
-  //     let laps = Math.abs(curAnimation['radians']/Math.PI)
-  //     for (let i in curAnimation['side']){
-  //       let cubie = curAnimation['side'][i]
-  //       // console.log(cubie.obj.rotation[curAnimation["axis"]]-curAnimation["beforeRot"], curAnimation['radians'], (this.cur_laps < laps))
-  //       if (this.compareCorrectly(cubie.obj.rotation[curAnimation["axis"]], curAnimation['radians'], curAnimation['dir'])){
-  //         // this.cur_laps += ((cubie.obj.rotation[curAnimation["axis"]] < Math.PI && (curAnimation['side'].indexOf(cubie) ==  curAnimation['side'].length -1))? 1: 0
-  //         this.cur_laps += this.compareCorrectly(cubie.obj.rotation[curAnimation["axis"]], curAnimation["beforeRot"], curAnimation['dir'])? 0: 1
-  //         this.rotateArroundPoint(cubie.obj, this.center, this[curAnimation["axis"]+'Axis'], curAnimation['dir'] * this.animationSpeed)
-  //         console.log((cubie.obj.rotation[curAnimation["axis"]]))
-
-  //       }
-  //       else {
-  //         this.cur_laps = 0
-  //         // console.log(cubie.obj.position)
-  //         // console.log(cubie.obj.rotation[curAnimation["axis"]])
-  //         this.animateQueue.shift()
-  //         break;
-  //       }
-  //     }
-  //   }
-  // }
-
+z
   l(clockwise=true){
     let rotationDir = clockwise ? 1 : -1
     this.rotateOnGivenAxis('x', -1, rotationDir)
@@ -203,27 +165,7 @@ class Rotate{
   }
   
 
-  // obj - your object (THREE.Object3D or derived)
-  // point - the point of rotation (THREE.Vector3)
-  // axis - the axis of rotation (normalized THREE.Vector3)
-  // theta - radian value of rotation
-  // pointIsWorld - boolean indicating the point is in world coordinates (default = false)
-  rotateArroundPoint(obj, point, axis, theta, pointIsWorld){
-    pointIsWorld = (pointIsWorld === undefined)? false : pointIsWorld;
-
-    if(pointIsWorld)
-        obj.parent.localToWorld(obj.position); // compensate for world coordinate
-
-    obj.position.sub(point); // remove the offset
-    obj.position.applyAxisAngle(axis, theta); // rotate the POSITION
-    obj.position.add(point); // re-add the offset
-
-    if(pointIsWorld){
-        obj.parent.worldToLocal(obj.position); // undo world coordinates compensation
-    }
-    obj.rotateOnWorldAxis(axis, theta); // rotate the OBJECT
-
-  }
+ 
 }
 // Setup
 
@@ -283,17 +225,13 @@ scene.add(gridHelper);
 
 // working zone
 
-var sideGroup = new THREE.Group();
 let rubik = new Cube(3, [0, 0, 0]);
 // rubik.cube.rotation.x = (Math.PI*2)
 // console.log(rubik.cube['rotation']['x'])
 scene.add(rubik.cube);
-
 let rotate = new Rotate(rubik);
 
-
-
-document.addEventListener("keypress", (event) => {
+document.addEventListener("keyup", (event) => {
   switch (event.key.toLowerCase()){
     
     case 'r': rotate.r(event.key==='r'); break;
@@ -302,17 +240,26 @@ document.addEventListener("keypress", (event) => {
     case 'd': rotate.d(event.key==='d'); break;
     case 'f': rotate.f(event.key==='f'); break;
     case 'b': rotate.b(event.key==='b'); break;
-    case 's': rotate.r(); rotate.u(); rotate.r(false), rotate.u(false); break;
-         
+    case 's': 
+    let moves = ['r', 'u', "R", "U"]
+    for (let move in moves){
+      setTimeout(function() {
+        rotate[moves[move].toLowerCase()](moves[move] === moves[move].toLowerCase())
+      }, (500*move));  
+    }
+  
+    break;
+      
 
   }
 
 });
-function animate(){
-  requestAnimationFrame( animate );
+
+let deg = 0;
+renderer.setAnimationLoop(() => {
   controls.update()
+
   renderer.render(scene, camera);
   rotate.animateRotation()
 
-}
-animate()
+})
