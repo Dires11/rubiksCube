@@ -53,8 +53,9 @@ class Cube{
           let cubie = new Cubie(this.cubieSize, (x*(this.cubieSize+this.margin)), (y*(this.cubieSize+this.margin)), (z*(this.cubieSize+this.margin)), [...a, ...b, ...c]);
           this.cubies.push(cubie);
           this.cube.add(cubie.obj);
-          const axesHelper = new THREE.AxesHelper( 1 );
+          const axesHelper = new THREE.AxesHelper( 4 );
 
+          this.cube.add(axesHelper);
           cubie.obj.add( axesHelper );
 
         }
@@ -71,7 +72,7 @@ class Rotate{
     this.zAxis =  new THREE.Vector3(0, 0, 1);
     this.center = new THREE.Vector3(0, 0, 0);  
     this.cur_laps = 0;
-    this.animationStep=  Math.PI/100;
+    this.animationStep=  Math.PI/20;
     this.animateQueue = []
     this.curSteps = 1
     this.flag = true
@@ -80,11 +81,19 @@ class Rotate{
 
 
   rotateOnGivenAxis(axis, coord, rotationDir){
-    let side = this.cube.cubies.filter(cubie => Math.round(cubie.obj.position[axis]) == (coord));
+    let side = this.cube.cubies.filter(cubie => {
+      if (Math.round(cubie.obj.position[axis]) == (coord)){
+        cubie.obj.rotation.original = cubie.obj.rotation[axis]
+        cubie.obj.position.original = [cubie.obj.position.x, cubie.obj.position.y, cubie.obj.position.z]
+        console.log(cubie.obj.rotation.orginal)
+        return cubie
+      }
+    });
     let deg = Math.PI/2;
     
-    this.animateQueue.push({'side': side, 'axis': axis, 'deg': deg, 'dir': rotationDir});
-    // side.forEach(cubie => {this.rotateArroundPoint(cubie.obj, this.center, this[axis+'Axis'], THREE.MathUtils.degToRad(rotationDir*90), true); console.log(cubie.obj.rotation)});
+    this.animateQueue.push({'side': side, 'sideCopy': [...side], 'axis': axis, 'deg': deg, 'dir': rotationDir});
+    // side.forEach(cubie => {this.rotateArroundPoint(cubie.obj, this.center, this[axis+'Axis'], THREE.MathUtils.degToRad(rotationDir*90), true)});
+    // side.forEach(cubie => {this.rotateArroundPoint(cubie.obj, this.center, this[axis+'Axis'], THREE.MathUtils.degToRad(rotationDir*45), true)});
   
   }
 
@@ -97,43 +106,42 @@ class Rotate{
     pointIsWorld = (pointIsWorld === undefined)? false : pointIsWorld;
     if(pointIsWorld)
         obj.parent.localToWorld(obj.position); // compensate for world coordinate
-
+    obj.position.set(...obj.position.original) // change later
     obj.position.sub(point); // remove the offset
     obj.position.applyAxisAngle(axis, theta); // rotate the POSITION
+
     obj.position.add(point); // re-add the offset
 
     if(pointIsWorld){
         obj.parent.worldToLocal(obj.position); // undo world coordinates compensation
     }
-    obj.rotateOnWorldAxis(axis, theta); // rotate the OBJECT
+    console.log(obj.rotation.original)
+    obj.setRotationFromAxisAngle(axis, obj.rotation.original + theta); // rotate the OBJECT
 
   }
   
   animateRotation(){
     let cur = this.animateQueue[0];
     if (cur != undefined ){
-      for (let i in cur['side']){
-        let cubie = cur['side'][i]
-        this.rotateArroundPoint(cubie.obj, this.center, this[cur['axis']+'Axis'], cur['dir']*this.animationStep, true)
+      for (let i=0; i < cur['side'].length; i++){
+        console.log(i)
+        let cubie = cur["side"][i]
+        console.log(this.curSteps*cur['dir']*this.animationStep)
+        this.rotateArroundPoint(cubie.obj, this.center, this[cur['axis']+'Axis'], this.curSteps*cur['dir']*this.animationStep, true)
         if (i == cur['side'].length-1){
           if ((this.curSteps*this.animationStep) >= cur['deg']){
             console.log('finished dif', cur['deg']-(this.curSteps*this.animationStep))
             this.curSteps = 1;
             this.animateQueue.shift()
-            setTimeout(function() {
-            }, (5000));   
             break;
           }
-          console.log('stil not finished', (this.curSteps*this.animationStep), cur['deg'])
-
           this.curSteps += 1;
         }
-        console.log('...')
       }
     }
   }
 
-z
+
   l(clockwise=true){
     let rotationDir = clockwise ? 1 : -1
     this.rotateOnGivenAxis('x', -1, rotationDir)
@@ -220,7 +228,7 @@ const controls = new OrbitControls(camera, renderer.domElement);
 // helpers
 
 const gridHelper = new THREE.GridHelper(200, 50);
-scene.add(gridHelper);
+// scene.add(gridHelper);
 
 
 // working zone
@@ -255,11 +263,19 @@ document.addEventListener("keyup", (event) => {
 
 });
 
-let deg = 0;
+// document.addEventListener('mousemove', (event) => {
+//   console.log(event)
+// })
+const axis = new THREE.Vector3(0, 1, 0)
+// const axis2 = new THREE.Vector3(0, 0, 1)
+const point = new THREE.Vector3(5, 0, 0)
+
+let theta = 0.01
 renderer.setAnimationLoop(() => {
   controls.update()
-
   renderer.render(scene, camera);
+  // rubik.cube.rotateOnWorldAxis(axis2, theta); // rotate the POSITION
   rotate.animateRotation()
+
 
 })
